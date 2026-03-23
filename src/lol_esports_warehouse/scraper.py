@@ -1,0 +1,100 @@
+import logging
+
+from lol_esports_warehouse.db import Database
+from lol_esports_warehouse.riot import RiotService
+
+logger = logging.getLogger(__name__)
+
+
+class Scraper:
+    def __init__(self, svc: RiotService, db: Database):
+        self._svc = svc
+        self._db = db
+
+    def sync_schedule(self) -> None:
+        total = 0
+
+        def on_page(events):
+            nonlocal total
+            self._db.save_events(events)
+            total += len(events)
+            logger.info("Saved page (%d events, %d total)", len(events), total)
+
+        logger.info("Fetching schedule...")
+        self._svc.fetch_all_schedule(on_page=on_page, all_exist=self._db.all_events_exist)
+        logger.info("Schedule sync complete — %d events saved", total)
+
+    def backfill_event_details(self) -> None:
+        match_ids = self._db.get_match_ids_without_games()
+        if not match_ids:
+            logger.info("No events to backfill")
+            return
+        logger.info("Fetching details for %d matches...", len(match_ids))
+        for i, match_id in enumerate(match_ids, 1):
+            try:
+                detail = self._svc.get_event_details(int(match_id))
+                self._db.save_event_details(detail)
+                logger.info("[%d/%d] %s — %d games", i, len(match_ids), match_id, len(detail.match.games))
+            except Exception:
+                logger.error("[%d/%d] %s — failed", i, len(match_ids), match_id, exc_info=True)
+
+    def refresh_stale_events(self) -> None:
+        match_ids = self._db.get_stale_event_match_ids()
+        if not match_ids:
+            logger.info("No stale events to refresh")
+            return
+        logger.info("Refreshing %d stale events...", len(match_ids))
+        for i, match_id in enumerate(match_ids, 1):
+            try:
+                detail = self._svc.get_event_details(int(match_id))
+                new_state = self._infer_event_state(detail)
+                self._db.update_event_from_details(detail, new_state)
+                logger.info("[%d/%d] %s — %s", i, len(match_ids), match_id, new_state)
+            except Exception:
+                logger.error("[%d/%d] %s — failed", i, len(match_ids), match_id, exc_info=True)
+
+    def sync_teams(self) -> None:
+        logger.info("Fetching teams...")
+        teams = self._svc.get_teams()
+        self._db.save_teams(teams)
+        logger.info("Saved %d teams", len(teams))
+
+    def refresh_stale_games(self) -> None:
+        game_ids = self._db.get_stale_game_ids()
+        if not game_ids:
+            logger.info("No stale games to refresh")
+            return
+        chunks = [game_ids[i:i + 10] for i in range(0, len(game_ids), 10)]
+        logger.info("Refreshing %d stale games in %d batches...", len(game_ids), len(chunks))
+        for i, chunk in enumerate(chunks, 1):
+            try:
+                games = self._svc.get_games(chunk)
+                self._db.update_games(games)
+                logger.info("[batch %d/%d] updated %d games", i, len(chunks), len(games))
+            except Exception:
+                logger.error("[batch %d/%d] failed", i, len(chunks), exc_info=True)
+
+    def backfill_game_frames(self) -> None:
+        game_ids = self._db.get_completed_game_ids_without_frames()
+        if not game_ids:
+            logger.info("No completed games to backfill frames for")
+            return
+        logger.info("Fetching window frames for %d games...", len(game_ids))
+        for i, game_id in enumerate(game_ids, 1):
+            try:
+                window = self._svc.fetch_game_window(game_id)
+                if window is None:
+                    self._db.mark_game_frames_unavailable(game_id)
+                    logger.info("[%d/%d] %s — unavailable (204)", i, len(game_ids), game_id)
+                else:
+                    self._db.save_game_window(game_id, window)
+                    logger.info("[%d/%d] %s — %d frames", i, len(game_ids), game_id, len(window.frames))
+            except Exception:
+                logger.error("[%d/%d] %s — failed", i, len(game_ids), game_id, exc_info=True)
+
+    @staticmethod
+    def _infer_event_state(detail) -> str:
+        game_states = {g.state for g in detail.match.games}
+        if game_states and game_states <= {"completed", "unneeded"}:
+            return "completed"
+        return "inProgress"
