@@ -8,12 +8,14 @@ def main() -> None:
     setup_logging()
     with RiotService() as svc, Database() as db:
         scraper = Scraper(svc, db)
-        # scraper.sync_schedule()
-        # scraper.backfill_event_details()
+        scraper.sync_leagues()
+        scraper.sync_tournaments()
+        scraper.sync_teams()
+        scraper.sync_schedule()
+        scraper.backfill_event_details()
         scraper.refresh_stale_events()
         scraper.refresh_stale_games()
-        scraper.backfill_game_frames()
-        # scraper.sync_teams()
+       # scraper.backfill_game_frames()
 
 
 if __name__ == "__main__":

@@ -11,6 +11,20 @@ class Scraper:
         self._svc = svc
         self._db = db
 
+    def sync_leagues(self) -> None:
+        logger.info("Fetching leagues...")
+        leagues = self._svc.get_leagues()
+        self._db.save_leagues(leagues)
+        logger.info("Saved %d leagues", len(leagues))
+
+    def sync_tournaments(self) -> None:
+        logger.info("Fetching tournaments...")
+        leagues = self._svc.get_leagues()
+        for league in leagues:
+            tournaments = self._svc.get_tournaments_for_league(int(league.id))
+            self._db.save_tournaments(tournaments, league.id)
+            logger.info("League %s — %d tournaments", league.slug, len(tournaments))
+
     def sync_schedule(self) -> None:
         total = 0
 
