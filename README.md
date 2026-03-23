@@ -30,7 +30,13 @@ src/riot_scraper/
 ├── config.py                  # Loads .env, exposes RIOT_API_KEY
 ├── main.py                    # Entry point — thin wiring only
 ├── scraper.py                 # Business logic & orchestration (Scraper class)
-├── db.py                      # PostgreSQL database layer
+├── db/                        # PostgreSQL database layer (DAO pattern)
+│   ├── __init__.py            # Database class — connection, schema, composes DAOs
+│   ├── schema.py              # CREATE TABLE DDL
+│   ├── league_dao.py          # LeagueDAO — leagues + tournaments
+│   ├── event_dao.py           # EventDAO — events, event_teams, event details
+│   ├── game_dao.py            # GameDAO — games, game_teams, vods, frames
+│   └── team_dao.py            # TeamDAO — teams + players
 ├── riot/                      # Sub-package for all Riot API interaction
 │   ├── __init__.py            # Exports PersistedClient, LiveStatsClient, RiotService
 │   ├── client.py              # Two HTTP clients (PersistedClient, LiveStatsClient)

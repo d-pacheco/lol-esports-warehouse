@@ -14,7 +14,7 @@ class Scraper:
     def sync_leagues(self) -> None:
         logger.info("Fetching leagues...")
         leagues = self._svc.get_leagues()
-        self._db.save_leagues(leagues)
+        self._db.leagues.save(leagues)
         logger.info("Saved %d leagues", len(leagues))
 
     def sync_tournaments(self) -> None:
@@ -22,7 +22,7 @@ class Scraper:
         leagues = self._svc.get_leagues()
         for league in leagues:
             tournaments = self._svc.get_tournaments_for_league(int(league.id))
-            self._db.save_tournaments(tournaments, league.id)
+            self._db.leagues.save_tournaments(tournaments, league.id)
             logger.info("League %s — %d tournaments", league.slug, len(tournaments))
 
     def sync_schedule(self) -> None:
@@ -30,16 +30,16 @@ class Scraper:
 
         def on_page(events):
             nonlocal total
-            self._db.save_events(events)
+            self._db.events.save(events)
             total += len(events)
             logger.info("Saved page (%d events, %d total)", len(events), total)
 
         logger.info("Fetching schedule...")
-        self._svc.fetch_all_schedule(on_page=on_page, all_exist=self._db.all_events_exist)
+        self._svc.fetch_all_schedule(on_page=on_page, all_exist=self._db.events.all_exist)
         logger.info("Schedule sync complete — %d events saved", total)
 
     def backfill_event_details(self) -> None:
-        match_ids = self._db.get_match_ids_without_games()
+        match_ids = self._db.events.get_ids_without_games()
         if not match_ids:
             logger.info("No events to backfill")
             return
@@ -47,13 +47,13 @@ class Scraper:
         for i, match_id in enumerate(match_ids, 1):
             try:
                 detail = self._svc.get_event_details(int(match_id))
-                self._db.save_event_details(detail)
+                self._db.events.save_details(detail)
                 logger.info("[%d/%d] %s — %d games", i, len(match_ids), match_id, len(detail.match.games))
             except Exception:
                 logger.error("[%d/%d] %s — failed", i, len(match_ids), match_id, exc_info=True)
 
     def refresh_stale_events(self) -> None:
-        match_ids = self._db.get_stale_event_match_ids()
+        match_ids = self._db.events.get_stale_match_ids()
         if not match_ids:
             logger.info("No stale events to refresh")
             return
@@ -62,7 +62,7 @@ class Scraper:
             try:
                 detail = self._svc.get_event_details(int(match_id))
                 new_state = self._infer_event_state(detail)
-                self._db.update_event_from_details(detail, new_state)
+                self._db.events.update_from_details(detail, new_state)
                 logger.info("[%d/%d] %s — %s", i, len(match_ids), match_id, new_state)
             except Exception:
                 logger.error("[%d/%d] %s — failed", i, len(match_ids), match_id, exc_info=True)
@@ -70,11 +70,11 @@ class Scraper:
     def sync_teams(self) -> None:
         logger.info("Fetching teams...")
         teams = self._svc.get_teams()
-        self._db.save_teams(teams)
+        self._db.teams.save(teams)
         logger.info("Saved %d teams", len(teams))
 
     def refresh_stale_games(self) -> None:
-        game_ids = self._db.get_stale_game_ids()
+        game_ids = self._db.games.get_stale_ids()
         if not game_ids:
             logger.info("No stale games to refresh")
             return
@@ -83,13 +83,13 @@ class Scraper:
         for i, chunk in enumerate(chunks, 1):
             try:
                 games = self._svc.get_games(chunk)
-                self._db.update_games(games)
+                self._db.games.update(games)
                 logger.info("[batch %d/%d] updated %d games", i, len(chunks), len(games))
             except Exception:
                 logger.error("[batch %d/%d] failed", i, len(chunks), exc_info=True)
 
     def backfill_game_frames(self) -> None:
-        game_ids = self._db.get_completed_game_ids_without_frames()
+        game_ids = self._db.games.get_completed_ids_without_frames()
         if not game_ids:
             logger.info("No completed games to backfill frames for")
             return
@@ -98,10 +98,10 @@ class Scraper:
             try:
                 window = self._svc.fetch_game_window(game_id)
                 if window is None:
-                    self._db.mark_game_frames_unavailable(game_id)
+                    self._db.games.mark_frames_unavailable(game_id)
                     logger.info("[%d/%d] %s — unavailable (204)", i, len(game_ids), game_id)
                 else:
-                    self._db.save_game_window(game_id, window)
+                    self._db.games.save_window(game_id, window)
                     logger.info("[%d/%d] %s — %d frames", i, len(game_ids), game_id, len(window.frames))
             except Exception:
                 logger.error("[%d/%d] %s — failed", i, len(game_ids), game_id, exc_info=True)
