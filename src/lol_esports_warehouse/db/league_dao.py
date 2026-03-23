@@ -12,9 +12,9 @@ class LeagueDAO:
         with self._pool.connection() as conn:
             with conn.cursor() as cur:
                 cur.executemany(
-                    "INSERT INTO leagues (id, slug, name, image, priority, region) VALUES (%s, %s, %s, %s, %s, %s) "
-                    "ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug, name=EXCLUDED.name, image=EXCLUDED.image, priority=EXCLUDED.priority, region=EXCLUDED.region",
-                    [(l.id, l.slug, l.name, l.image, l.priority, l.region) for l in leagues],
+                    "INSERT INTO leagues (id, slug, name, image, region) VALUES (%s, %s, %s, %s, %s) "
+                    "ON CONFLICT (id) DO UPDATE SET slug=EXCLUDED.slug, name=EXCLUDED.name, image=EXCLUDED.image, region=EXCLUDED.region",
+                    [(l.id, l.slug, l.name, l.image, l.region) for l in leagues],
                 )
             conn.commit()
 

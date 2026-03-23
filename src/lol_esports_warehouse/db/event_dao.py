@@ -15,8 +15,7 @@ class EventDAO:
         team_rows = []
         for e in events:
             event_rows.append((
-                e.match.id, e.startTime, e.blockName, e.state, e.type,
-                e.league.slug, e.league.name,
+                e.match.id, e.startTime, e.blockName, e.state,
                 e.match.strategy.type, e.match.strategy.count,
             ))
             for t in e.match.teams:
@@ -31,9 +30,9 @@ class EventDAO:
         with self._pool.connection() as conn:
             with conn.cursor() as cur:
                 cur.executemany(
-                    "INSERT INTO events (match_id, start_time, block_name, state, type, league_slug, league_name, strategy_type, strategy_count) "
-                    "VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s) "
-                    "ON CONFLICT (match_id) DO UPDATE SET start_time=EXCLUDED.start_time, block_name=EXCLUDED.block_name, state=EXCLUDED.state, type=EXCLUDED.type, league_slug=EXCLUDED.league_slug, league_name=EXCLUDED.league_name, strategy_type=EXCLUDED.strategy_type, strategy_count=EXCLUDED.strategy_count",
+                    "INSERT INTO events (match_id, start_time, block_name, state, strategy_type, strategy_count) "
+                    "VALUES (%s, %s, %s, %s, %s, %s) "
+                    "ON CONFLICT (match_id) DO UPDATE SET start_time=EXCLUDED.start_time, block_name=EXCLUDED.block_name, state=EXCLUDED.state, strategy_type=EXCLUDED.strategy_type, strategy_count=EXCLUDED.strategy_count",
                     event_rows,
                 )
                 cur.executemany(
@@ -48,6 +47,16 @@ class EventDAO:
         match_id = detail.id
         with self._pool.connection() as conn:
             with conn.cursor() as cur:
+                cur.execute(
+                    "UPDATE events SET league_id = %s, tournament_id = %s WHERE match_id = %s",
+                    (detail.league.id, detail.tournament.id, match_id),
+                )
+                for t in detail.match.teams:
+                    if t.id != "0":  # Skip TBD teams
+                        cur.execute(
+                            "UPDATE event_teams SET team_id = %s WHERE match_id = %s AND team_code = %s",
+                            (t.id, match_id, t.code),
+                        )
                 for game in detail.match.games:
                     cur.execute(
                         "INSERT INTO games (id, match_id, state, number) VALUES (%s, %s, %s, %s) "
@@ -55,11 +64,12 @@ class EventDAO:
                         (game.id, match_id, game.state, game.number),
                     )
                     for gt in game.teams:
-                        cur.execute(
-                            "INSERT INTO game_teams (game_id, team_id, side) VALUES (%s, %s, %s) "
-                            "ON CONFLICT (game_id, team_id) DO UPDATE SET side=EXCLUDED.side",
-                            (game.id, gt.id, gt.side),
-                        )
+                        if gt.id != "0":  # Skip TBD teams
+                            cur.execute(
+                                "INSERT INTO game_teams (game_id, team_id, side) VALUES (%s, %s, %s) "
+                                "ON CONFLICT (game_id, team_id) DO UPDATE SET side=EXCLUDED.side",
+                                (game.id, gt.id, gt.side),
+                            )
                     for vod in game.vods:
                         cur.execute(
                             "INSERT INTO vods (game_id, parameter, locale, provider, offset_secs) VALUES (%s, %s, %s, %s, %s) "

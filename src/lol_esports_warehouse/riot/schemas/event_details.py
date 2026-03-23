@@ -59,9 +59,14 @@ class EventDetailLeague(BaseModel):
     image: str
 
 
+class EventDetailTournament(BaseModel):
+    id: str
+
+
 class EventDetail(BaseModel):
     id: str
     type: str
+    tournament: EventDetailTournament
     league: EventDetailLeague
     match: EventDetailMatch
     streams: list[Stream] = []

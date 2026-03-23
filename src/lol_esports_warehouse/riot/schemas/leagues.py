@@ -6,5 +6,4 @@ class League(BaseModel):
     slug: str
     name: str
     image: str
-    priority: int
     region: str

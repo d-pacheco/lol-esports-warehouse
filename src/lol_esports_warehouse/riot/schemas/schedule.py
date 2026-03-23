@@ -39,11 +39,11 @@ class EventLeague(BaseModel):
 
 class ScheduleEvent(BaseModel):
     startTime: str
-    blockName: str
+    blockName: str | None = None
     state: str
     type: str
     league: EventLeague
-    match: Match
+    match: Match | None = None
 
 
 class SchedulePages(BaseModel):

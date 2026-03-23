@@ -40,7 +40,9 @@ class RiotService:
         if page_token:
             params["pageToken"] = page_token
         data = self._persisted.get("/getSchedule", params=params)
-        return Schedule(**data["data"]["schedule"])
+        schedule = Schedule(**data["data"]["schedule"])
+        schedule.events = [e for e in schedule.events if e.type == "match"]
+        return schedule
 
     def fetch_all_schedule(
         self,

@@ -4,7 +4,6 @@ CREATE TABLE IF NOT EXISTS leagues (
     slug TEXT NOT NULL,
     name TEXT NOT NULL,
     image TEXT NOT NULL,
-    priority INTEGER NOT NULL,
     region TEXT NOT NULL
 );
 CREATE TABLE IF NOT EXISTS tournaments (
@@ -14,19 +13,29 @@ CREATE TABLE IF NOT EXISTS tournaments (
     end_date TEXT NOT NULL,
     league_id TEXT NOT NULL REFERENCES leagues(id)
 );
+CREATE TABLE IF NOT EXISTS teams (
+    id TEXT PRIMARY KEY,
+    slug TEXT NOT NULL,
+    name TEXT NOT NULL,
+    code TEXT NOT NULL,
+    image TEXT NOT NULL DEFAULT '',
+    alternative_image TEXT,
+    home_league_name TEXT NOT NULL DEFAULT '',
+    home_league_region TEXT NOT NULL DEFAULT ''
+);
 CREATE TABLE IF NOT EXISTS events (
     match_id TEXT PRIMARY KEY,
     start_time TEXT NOT NULL,
     block_name TEXT NOT NULL,
     state TEXT NOT NULL,
-    type TEXT NOT NULL,
-    league_slug TEXT NOT NULL,
-    league_name TEXT NOT NULL,
+    league_id TEXT REFERENCES leagues(id),
+    tournament_id TEXT REFERENCES tournaments(id),
     strategy_type TEXT NOT NULL,
     strategy_count INTEGER NOT NULL
 );
 CREATE TABLE IF NOT EXISTS event_teams (
     match_id TEXT NOT NULL REFERENCES events(match_id),
+    team_id TEXT REFERENCES teams(id),
     team_code TEXT NOT NULL,
     team_name TEXT NOT NULL,
     team_image TEXT NOT NULL,
@@ -45,7 +54,7 @@ CREATE TABLE IF NOT EXISTS games (
 );
 CREATE TABLE IF NOT EXISTS game_teams (
     game_id TEXT NOT NULL REFERENCES games(id),
-    team_id TEXT NOT NULL,
+    team_id TEXT NOT NULL REFERENCES teams(id),
     side TEXT,
     PRIMARY KEY (game_id, team_id)
 );
@@ -57,16 +66,6 @@ CREATE TABLE IF NOT EXISTS vods (
     offset_secs INTEGER NOT NULL DEFAULT 0,
     PRIMARY KEY (game_id, parameter)
 );
-CREATE TABLE IF NOT EXISTS teams (
-    id TEXT PRIMARY KEY,
-    slug TEXT NOT NULL,
-    name TEXT NOT NULL,
-    code TEXT NOT NULL,
-    image TEXT NOT NULL DEFAULT '',
-    alternative_image TEXT,
-    home_league_name TEXT NOT NULL DEFAULT '',
-    home_league_region TEXT NOT NULL DEFAULT ''
-);
 CREATE TABLE IF NOT EXISTS players (
     id TEXT PRIMARY KEY,
     team_id TEXT NOT NULL REFERENCES teams(id),
@@ -77,11 +76,11 @@ CREATE TABLE IF NOT EXISTS players (
     role TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS game_metadata (
-    game_id TEXT PRIMARY KEY,
+    game_id TEXT PRIMARY KEY REFERENCES games(id),
     patch_version TEXT NOT NULL DEFAULT ''
 );
 CREATE TABLE IF NOT EXISTS game_participant_metadata (
-    game_id TEXT NOT NULL,
+    game_id TEXT NOT NULL REFERENCES games(id),
     participant_id INTEGER NOT NULL,
     esports_team_id TEXT NOT NULL DEFAULT '',
     team_side TEXT NOT NULL,
@@ -91,7 +90,7 @@ CREATE TABLE IF NOT EXISTS game_participant_metadata (
     PRIMARY KEY (game_id, participant_id)
 );
 CREATE TABLE IF NOT EXISTS game_team_frames (
-    game_id TEXT NOT NULL,
+    game_id TEXT NOT NULL REFERENCES games(id),
     team_side TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     game_state TEXT NOT NULL DEFAULT '',
@@ -103,7 +102,7 @@ CREATE TABLE IF NOT EXISTS game_team_frames (
     PRIMARY KEY (game_id, team_side, timestamp)
 );
 CREATE TABLE IF NOT EXISTS game_team_frame_dragons (
-    game_id TEXT NOT NULL,
+    game_id TEXT NOT NULL REFERENCES games(id),
     dragon_number INTEGER NOT NULL,
     team_side TEXT NOT NULL,
     dragon_type TEXT NOT NULL,
