@@ -5,12 +5,16 @@ Fetch professional esports game data from the Riot Games API.
 ## Setup
 
 ```bash
+# Start PostgreSQL
+docker compose up -d
+
+# Python environment
 python3 -m venv .venv
 source .venv/bin/activate
 pip install -e ".[dev]"
 ```
 
-Copy `.env.example` to `.env` and add your Riot API key.
+Copy `.env.example` to `.env` and add your Riot API key and database credentials.
 
 ## Usage
 
@@ -26,7 +30,7 @@ src/riot_scraper/
 ├── config.py                  # Loads .env, exposes RIOT_API_KEY
 ├── main.py                    # Entry point — thin wiring only
 ├── scraper.py                 # Business logic & orchestration (Scraper class)
-├── db.py                      # SQLite database layer
+├── db.py                      # PostgreSQL database layer
 ├── riot/                      # Sub-package for all Riot API interaction
 │   ├── __init__.py            # Exports PersistedClient, LiveStatsClient, RiotService
 │   ├── client.py              # Two HTTP clients (PersistedClient, LiveStatsClient)
@@ -104,7 +108,7 @@ Pydantic `BaseModel` classes matching the API response shapes. Field names use c
 
 ### Database (`db.py`)
 
-SQLite via stdlib `sqlite3`. Default file: `riot_scraper.db`. Tables:
+PostgreSQL via `psycopg` (v3). Connection configured via env vars (`DB_HOST`, `DB_PORT`, `DB_USER`, `DB_PASSWORD`, `DB_NAME`). Tables:
 
 - **leagues** — PK: `id`
 - **tournaments** — PK: `id`, FK: `league_id` → leagues
@@ -116,7 +120,7 @@ SQLite via stdlib `sqlite3`. Default file: `riot_scraper.db`. Tables:
 - **teams** — PK: `id`, stores slug, name, code, image, alternative_image (nullable), home league info
 - **players** — PK: `id`, FK: `team_id` → teams, stores summoner_name, first/last name, image, role
 
-All inserts use `INSERT OR REPLACE` so re-runs are safe.
+All inserts use `INSERT ... ON CONFLICT DO UPDATE` (upsert) so re-runs are safe.
 
 Key DB methods:
 - `save_leagues()`, `save_tournaments()`, `save_events()`, `save_event_details()`, `save_teams()`
