@@ -1,4 +1,5 @@
 import logging
+from concurrent.futures import ThreadPoolExecutor, as_completed
 
 from lol_esports_warehouse.db import Database
 from lol_esports_warehouse.riot import RiotService
@@ -88,23 +89,30 @@ class Scraper:
             except Exception:
                 logger.error("[batch %d/%d] failed", i, len(chunks), exc_info=True)
 
-    def backfill_game_frames(self) -> None:
+    def backfill_game_frames(self, max_workers: int = 5) -> None:
         game_ids = self._db.games.get_completed_ids_without_frames()
         if not game_ids:
             logger.info("No completed games to backfill frames for")
             return
-        logger.info("Fetching window frames for %d games...", len(game_ids))
-        for i, game_id in enumerate(game_ids, 1):
-            try:
-                window = self._svc.fetch_game_window(game_id)
-                if window is None:
-                    self._db.games.mark_frames_unavailable(game_id)
-                    logger.info("[%d/%d] %s — unavailable (204)", i, len(game_ids), game_id)
-                else:
-                    self._db.games.save_window(game_id, window)
-                    logger.info("[%d/%d] %s — %d frames", i, len(game_ids), game_id, len(window.frames))
-            except Exception:
-                logger.error("[%d/%d] %s — failed", i, len(game_ids), game_id, exc_info=True)
+        logger.info("Fetching window frames for %d games (%d workers)...", len(game_ids), max_workers)
+
+        def process_game(game_id: str) -> str:
+            window = self._svc.fetch_game_window(game_id)
+            if window is None:
+                self._db.games.mark_frames_unavailable(game_id)
+                return f"{game_id} — unavailable (204)"
+            self._db.games.save_window(game_id, window)
+            return f"{game_id} — {len(window.frames)} frames"
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(process_game, gid): gid for gid in game_ids}
+            for i, future in enumerate(as_completed(futures), 1):
+                game_id = futures[future]
+                try:
+                    result = future.result()
+                    logger.info("[%d/%d] %s", i, len(game_ids), result)
+                except Exception:
+                    logger.error("[%d/%d] %s — failed", i, len(game_ids), game_id, exc_info=True)
 
     @staticmethod
     def _infer_event_state(detail) -> str:

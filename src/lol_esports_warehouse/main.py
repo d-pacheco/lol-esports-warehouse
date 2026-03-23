@@ -15,7 +15,7 @@ def main() -> None:
         scraper.backfill_event_details()
         scraper.refresh_stale_events()
         scraper.refresh_stale_games()
-       # scraper.backfill_game_frames()
+        scraper.backfill_game_frames()
 
 
 if __name__ == "__main__":
