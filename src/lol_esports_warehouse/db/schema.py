@@ -50,7 +50,8 @@ CREATE TABLE IF NOT EXISTS games (
     match_id TEXT NOT NULL REFERENCES events(match_id),
     state TEXT NOT NULL,
     number INTEGER NOT NULL,
-    frames_status TEXT
+    frames_status TEXT,
+    details_status TEXT
 );
 CREATE TABLE IF NOT EXISTS game_teams (
     game_id TEXT NOT NULL REFERENCES games(id),
@@ -108,5 +109,42 @@ CREATE TABLE IF NOT EXISTS game_team_frame_dragons (
     dragon_type TEXT NOT NULL,
     timestamp TEXT NOT NULL,
     PRIMARY KEY (game_id, dragon_number)
+);
+CREATE TABLE IF NOT EXISTS game_participant_frames (
+    game_id TEXT NOT NULL REFERENCES games(id),
+    participant_id INTEGER NOT NULL,
+    timestamp TEXT NOT NULL,
+    level INTEGER NOT NULL DEFAULT 0,
+    kills INTEGER NOT NULL DEFAULT 0,
+    deaths INTEGER NOT NULL DEFAULT 0,
+    assists INTEGER NOT NULL DEFAULT 0,
+    creep_score INTEGER NOT NULL DEFAULT 0,
+    total_gold INTEGER NOT NULL DEFAULT 0,
+    current_health INTEGER NOT NULL DEFAULT 0,
+    max_health INTEGER NOT NULL DEFAULT 0,
+    total_gold_earned INTEGER NOT NULL DEFAULT 0,
+    kill_participation REAL NOT NULL DEFAULT 0,
+    champion_damage_share REAL NOT NULL DEFAULT 0,
+    wards_placed INTEGER NOT NULL DEFAULT 0,
+    wards_destroyed INTEGER NOT NULL DEFAULT 0,
+    attack_damage INTEGER NOT NULL DEFAULT 0,
+    ability_power INTEGER NOT NULL DEFAULT 0,
+    critical_chance REAL NOT NULL DEFAULT 0,
+    attack_speed REAL NOT NULL DEFAULT 0,
+    life_steal REAL NOT NULL DEFAULT 0,
+    armor INTEGER NOT NULL DEFAULT 0,
+    magic_resistance INTEGER NOT NULL DEFAULT 0,
+    tenacity REAL NOT NULL DEFAULT 0,
+    items INTEGER[] NOT NULL DEFAULT '{}',
+    abilities TEXT NOT NULL DEFAULT '',
+    PRIMARY KEY (game_id, participant_id, timestamp)
+);
+CREATE TABLE IF NOT EXISTS game_participant_perks (
+    game_id TEXT NOT NULL REFERENCES games(id),
+    participant_id INTEGER NOT NULL,
+    style_id INTEGER NOT NULL DEFAULT 0,
+    sub_style_id INTEGER NOT NULL DEFAULT 0,
+    perks INTEGER[] NOT NULL DEFAULT '{}',
+    PRIMARY KEY (game_id, participant_id)
 );
 """

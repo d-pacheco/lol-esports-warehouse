@@ -12,11 +12,12 @@ def main() -> None:
         # scraper.sync_tournaments()
         # sync_teams must run before any game data is saved — game_teams.team_id FKs to teams(id)
         # scraper.sync_teams()
-        scraper.sync_schedule()
-        scraper.backfill_event_details()
+        # scraper.sync_schedule()
+        # scraper.backfill_event_details()
         # scraper.refresh_stale_events()
         # scraper.refresh_stale_games()
         # scraper.backfill_game_frames()
+        # scraper.backfill_game_details()
 
 
 if __name__ == "__main__":

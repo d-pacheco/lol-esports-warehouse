@@ -7,6 +7,7 @@ from lol_esports_warehouse.riot.schemas.schedule import Schedule, ScheduleEvent
 from lol_esports_warehouse.riot.schemas.teams import Team
 from lol_esports_warehouse.riot.schemas.tournaments import Tournament
 from lol_esports_warehouse.riot.schemas.window import WindowResponse
+from lol_esports_warehouse.riot.schemas.details import DetailsResponse
 from collections.abc import Callable
 
 _TIME_FMT = r"%Y-%m-%dT%H:%M:%SZ"
@@ -121,6 +122,35 @@ class RiotService:
         while all_frames and all_frames[-1].gameState != "finished":
             data = self._live.get_window(game_id, next_ts.strftime(_TIME_FMT))
             page = WindowResponse(**data)
+            if not page.frames:
+                break
+            all_frames.extend(page.frames)
+            next_ts += timedelta(seconds=10)
+
+        response.frames = all_frames
+        return response
+
+    def fetch_game_details(self, game_id: str) -> DetailsResponse | None:
+        """Paginate getDetails for a completed game, returning all frames."""
+        data = self._live.get_details(game_id)
+        if data is None:
+            return None
+        response = DetailsResponse(**data)
+        all_frames = list(response.frames)
+
+        next_ts = None
+        if all_frames:
+            next_ts = datetime.strptime(
+                all_frames[-1].rfc460Timestamp.split(".")[0].rstrip("Z") + "Z",
+                _TIME_FMT,
+            )
+            next_ts += timedelta(seconds=10 - next_ts.second % 10 + 10)
+
+        while all_frames:
+            data = self._live.get_details(game_id, next_ts.strftime(_TIME_FMT))
+            if data is None:
+                break
+            page = DetailsResponse(**data)
             if not page.frames:
                 break
             all_frames.extend(page.frames)

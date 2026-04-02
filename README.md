@@ -86,6 +86,7 @@ Both use the public esports API key and send `Origin`/`Referrer` headers for lol
 - `get_games(game_ids)` → `list[Game]` — fetches game state and vods for one or more game IDs
 - `get_teams(team_slugs?)` → `list[Team]` — fetches teams with player rosters. Pass no args to fetch all teams, or a list of slugs to fetch specific ones.
 - `fetch_game_window(game_id)` → `WindowResponse | None` — paginates the LiveStats `getWindow` endpoint for a completed game, collecting all frames. Returns `None` (204) if data is unavailable.
+- `fetch_game_details(game_id)` → `DetailsResponse | None` — paginates the LiveStats `getDetails` endpoint for a completed game, collecting all per-participant detail frames. Returns `None` (204) if data is unavailable.
 
 ### Scraper (`scraper.py`)
 
@@ -99,12 +100,13 @@ Both use the public esports API key and send `Origin`/`Referrer` headers for lol
 - `refresh_stale_events()` — re-fetches event details for events with past start times that are still `unstarted` or `inProgress`, infers the new event state from game states, and updates event_teams game_wins
 - `refresh_stale_games()` — re-fetches game data (state + vods) for games that are still `unstarted` or `inProgress` with past event start times, in batches of 10
 - `backfill_game_frames(max_workers=5)` — fetches live stats window data for completed games that don't have frame data yet, using a thread pool. Saves game metadata, participant metadata, team frames, and dragon events. Marks games as `unavailable` if the API returns 204.
+- `backfill_game_details(max_workers=5)` — fetches live stats detail data for completed games that don't have detail data yet, using a thread pool. Saves per-participant frame stats (kills, gold, items, etc.) and perks (runes). Marks games as `unavailable` if the API returns 204.
 
 #### Execution Order
 
 The `main.py` entry point runs operations in this order:
 
-1. `sync_leagues` → `sync_tournaments` → `sync_teams` → `sync_schedule` → `backfill_event_details` → `refresh_stale_events` → `refresh_stale_games` → `backfill_game_frames`
+1. `sync_leagues` → `sync_tournaments` → `sync_teams` → `sync_schedule` → `backfill_event_details` → `refresh_stale_events` → `refresh_stale_games` → `backfill_game_frames` → `backfill_game_details`
 
 `sync_teams` must run before game data operations due to the `game_teams.team_id` FK constraint.
 
@@ -126,6 +128,7 @@ Pydantic `BaseModel` classes matching the API response shapes. Field names use c
 - **event_details.py**: `EventDetail`, `EventDetailTournament`, `EventDetailLeague`, `EventDetailMatch`, `EventDetailTeam`, `Game`, `GameTeam`, `Vod`, `Stream`
 - **teams.py**: `Team`, `Player`, `HomeLeague`
 - **window.py**: `WindowResponse`, `WindowFrame`, `WindowTeamStats`, `GameMetadata`, `TeamMetadata`, `ParticipantMetadata`
+- **details.py**: `DetailsResponse`, `DetailsFrame`, `DetailsParticipant`, `PerkMetadata`
 
 ### Database (`db/`)
 
@@ -138,7 +141,7 @@ Tables (created in FK-safe order):
 - **teams** — PK: `id`, stores slug, name, code, image, alternative_image (nullable), home league info
 - **events** — PK: `match_id`, FK: `league_id` → leagues (nullable), FK: `tournament_id` → tournaments (nullable), stores start_time, state, block_name, strategy
 - **event_teams** — PK: `(match_id, team_code)`, FK: `match_id` → events, FK: `team_id` → teams (nullable), stores results/record
-- **games** — PK: `id`, FK: `match_id` → events, stores state, game number, frames_status
+- **games** — PK: `id`, FK: `match_id` → events, stores state, game number, frames_status, details_status
 - **game_teams** — PK: `(game_id, team_id)`, FK: `game_id` → games, FK: `team_id` → teams, stores side (blue/red, nullable)
 - **vods** — PK: `(game_id, parameter)`, FK: `game_id` → games, stores vod info
 - **players** — PK: `id`, FK: `team_id` → teams, stores summoner_name, first/last name, image, role
@@ -146,6 +149,8 @@ Tables (created in FK-safe order):
 - **game_participant_metadata** — PK: `(game_id, participant_id)`, FK: `game_id` → games, stores champion, role, team side, summoner name
 - **game_team_frames** — PK: `(game_id, team_side, timestamp)`, FK: `game_id` → games, stores gold, towers, kills, inhibitors, barons per team per timestamp
 - **game_team_frame_dragons** — PK: `(game_id, dragon_number)`, FK: `game_id` → games, stores dragon type, team side, timestamp
+- **game_participant_frames** — PK: `(game_id, participant_id, timestamp)`, FK: `game_id` → games, stores per-participant stats per frame (kills, gold, items, etc.)
+- **game_participant_perks** — PK: `(game_id, participant_id)`, FK: `game_id` → games, stores rune selections (style, sub-style, 9 perk IDs)
 
 `league_id`, `tournament_id` on events and `team_id` on event_teams are nullable because they are populated by `backfill_event_details` (from the `getEventDetails` API), not from the schedule endpoint. TBD teams (team ID `"0"`) are skipped during event detail saves — the team FKs on `event_teams` and `game_teams` remain unpopulated until teams are determined and the event is refreshed.
 
@@ -177,13 +182,20 @@ Two refresh operations keep the database current:
 - Uses a thread pool (default 5 workers) for parallel fetching
 - Tracks `frames_status` on the games table: `NULL` = not yet fetched, `available` = frames saved, `unavailable` = API returned 204
 
+### Game Details Backfill
+
+`backfill_game_details` fetches live stats detail data for completed games using the LiveStats API. For each game:
+- Paginates through all detail frames collecting per-participant stats
+- Saves participant frames (kills, deaths, assists, gold, items, wards, combat stats, etc.) and perks (runes, saved once per participant per game)
+- Uses a thread pool (default 5 workers) for parallel fetching
+- Tracks `details_status` on the games table: `NULL` = not yet fetched, `available` = details saved, `unavailable` = API returned 204
+
 ## API Reference
 
 Using the unofficial lolesports API docs: https://vickz84259.github.io/lolesports-api-docs/
 
 ## What's Left / TODO
 
-- [ ] LiveStatsClient `getDetails` endpoint (per-participant frame data)
 - [ ] getStandings endpoint
 - [ ] Error handling / retries for API calls
 - [ ] CLI arguments (e.g. pick which data to fetch, specify DB path) for cron scheduling

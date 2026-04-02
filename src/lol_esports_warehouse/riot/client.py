@@ -52,3 +52,13 @@ class LiveStatsClient(_BaseClient):
             return None
         resp.raise_for_status()
         return resp.json()
+
+    def get_details(self, game_id: str, starting_time: str | None = None) -> dict | None:
+        params = {}
+        if starting_time:
+            params["startingTime"] = starting_time
+        resp = self._client.get(f"/details/{game_id}", params=params or None)
+        if resp.status_code == 204:
+            return None
+        resp.raise_for_status()
+        return resp.json()

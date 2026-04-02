@@ -114,6 +114,31 @@ class Scraper:
                 except Exception:
                     logger.error("[%d/%d] %s — failed", i, len(game_ids), game_id, exc_info=True)
 
+    def backfill_game_details(self, max_workers: int = 5) -> None:
+        game_ids = self._db.games.get_completed_ids_without_details()
+        if not game_ids:
+            logger.info("No completed games to backfill details for")
+            return
+        logger.info("Fetching player details for %d games (%d workers)...", len(game_ids), max_workers)
+
+        def process_game(game_id: str) -> str:
+            details = self._svc.fetch_game_details(game_id)
+            if details is None:
+                self._db.games.mark_details_unavailable(game_id)
+                return f"{game_id} — unavailable (204)"
+            self._db.games.save_details(game_id, details)
+            return f"{game_id} — {len(details.frames)} frames"
+
+        with ThreadPoolExecutor(max_workers=max_workers) as pool:
+            futures = {pool.submit(process_game, gid): gid for gid in game_ids}
+            for i, future in enumerate(as_completed(futures), 1):
+                game_id = futures[future]
+                try:
+                    result = future.result()
+                    logger.info("[%d/%d] %s", i, len(game_ids), result)
+                except Exception:
+                    logger.error("[%d/%d] %s — failed", i, len(game_ids), game_id, exc_info=True)
+
     @staticmethod
     def _infer_event_state(detail) -> str:
         game_states = {g.state for g in detail.match.games}
